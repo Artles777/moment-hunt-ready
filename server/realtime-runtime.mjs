@@ -252,6 +252,18 @@ function pickPlayableVideo(summary) {
   }
 }
 
+function resolveSportsPlayableVideo(summary, streamStatus) {
+  if (streamStatus === 'LIVE') {
+    return {
+      streamUrl: '',
+      streamSyncSupported: false,
+      posterUrl: null,
+    }
+  }
+
+  return pickPlayableVideo(summary)
+}
+
 function getRuntimeClockMs(feed) {
   if (feed.streamStatus === 'LIVE') {
     return Math.max(0, Date.now() - feed.startedAt)
@@ -353,7 +365,9 @@ async function loadSportsFeeds() {
         summary?.header?.competitions?.[0]?.status,
       )
       const finalClockMs = Math.max(events.at(-1)?.eventTimestamp ?? 0, liveClockMs, statusClockMs)
-      const playableVideo = pickPlayableVideo(summary)
+      // ESPN summary.videos commonly points to highlight/replay assets, not a true live browser-playable stream.
+      // Keep live sports honest: if upstream does not expose a real live stream URL, the UI should fall back to metadata.
+      const playableVideo = resolveSportsPlayableVideo(summary, streamStatus)
 
       return {
         source: 'sports',
