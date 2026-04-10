@@ -10,6 +10,7 @@ import type {
   ConnectionState,
   EventLog,
   FeedState,
+  FeedSnapshot,
   GameState,
   LiveEvent,
   Mode,
@@ -43,13 +44,27 @@ export function useMomentHuntRealtime({
   const handlePayload = useCallback((rawPayload: string) => {
     try {
       const payload = JSON.parse(rawPayload) as {
-        data?: FeedState | LiveEvent
+        data?: FeedState | FeedSnapshot | LiveEvent
         type?: string
       }
 
       if (payload.type === "feed_state") {
         const data = payload.data as FeedState
         setFeedsByMatch((prev) => ({ ...prev, [data.matchId]: data }))
+        return
+      }
+
+      if (payload.type === "feed_snapshot") {
+        const data = payload.data as FeedSnapshot
+        const matchIdSet = new Set(data.matchIds)
+
+        setFeedsByMatch((prev) =>
+          Object.fromEntries(
+            Object.entries(prev).filter(([, feed]) =>
+              feed.source !== data.source || matchIdSet.has(feed.matchId),
+            ),
+          ),
+        )
         return
       }
 

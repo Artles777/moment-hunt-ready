@@ -28,6 +28,7 @@ export function VideoHero({
   onArmRound,
   onCatch,
   onToggleVideoMute,
+  onEmbedLoad,
   onVideoError,
   onVideoReady,
   showVideoOverlay,
@@ -52,6 +53,7 @@ export function VideoHero({
   onArmRound: () => void
   onCatch: () => void
   onToggleVideoMute: () => void
+  onEmbedLoad: () => void
   onVideoError: () => void
   onVideoReady: () => void
   showVideoOverlay: boolean
@@ -133,7 +135,8 @@ export function VideoHero({
             src={currentStreamSource.playableUrl ?? undefined}
             allow="autoplay; encrypted-media; picture-in-picture; fullscreen"
             allowFullScreen
-            onLoad={onVideoReady}
+            onLoad={onEmbedLoad}
+            onError={onVideoError}
           />
         )}
 

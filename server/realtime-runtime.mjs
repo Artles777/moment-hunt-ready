@@ -91,6 +91,7 @@ const ESPORTS_FEEDS = [
 
 const runtimeFeeds = new Map()
 const listeners = new Set()
+const FEED_SOURCES = ['sports', 'esports']
 
 let runtimeStarted = false
 let startPromise = null
@@ -221,18 +222,25 @@ function firstNonEmptyString(candidates) {
   return candidates.find((value) => typeof value === 'string' && value.trim().length > 0) ?? ''
 }
 
+function getPlayableVideoCandidates(video) {
+  return [
+    // ESPN's Akamai progressive MP4s intermittently return HTTP 500 for replay clips,
+    // while the origin/mezzanine asset for the same clip remains available.
+    video?.links?.source?.mezzanine?.href,
+    video?.links?.source?.full?.href,
+    video?.links?.source?.href,
+    video?.links?.mobile?.source?.href,
+    video?.links?.source?.HD?.href,
+    video?.links?.source?.HLS?.HD?.href,
+    video?.links?.source?.HLS?.href,
+  ]
+}
+
 function pickPlayableVideo(summary) {
   const videos = Array.isArray(summary?.videos) ? summary.videos : []
 
   for (const video of videos) {
-    const streamUrl = firstNonEmptyString([
-      video?.links?.source?.full?.href,
-      video?.links?.source?.href,
-      video?.links?.mobile?.source?.href,
-      video?.links?.source?.HD?.href,
-      video?.links?.source?.HLS?.HD?.href,
-      video?.links?.source?.HLS?.href,
-    ])
+    const streamUrl = firstNonEmptyString(getPlayableVideoCandidates(video))
 
     if (!streamUrl) {
       continue
@@ -516,6 +524,22 @@ function emitLiveEvent(feed, event) {
   })
 }
 
+function emitFeedSnapshot(listener = notifyListeners) {
+  for (const source of FEED_SOURCES) {
+    const matchIds = [...runtimeFeeds.values()]
+      .filter((feed) => feed.source === source)
+      .map((feed) => feed.matchId)
+
+    listener({
+      type: 'feed_snapshot',
+      data: {
+        source,
+        matchIds,
+      },
+    })
+  }
+}
+
 function broadcastLiveSummaryEvents(feed) {
   if (feed.streamStatus !== 'LIVE') return
 
@@ -548,6 +572,8 @@ async function refreshFeeds() {
 }
 
 function broadcastFeedStates() {
+  emitFeedSnapshot()
+
   for (const feed of runtimeFeeds.values()) {
     notifyListeners({ type: 'feed_state', data: buildFeedState(feed) })
   }
@@ -576,6 +602,8 @@ function tickReplayFeeds() {
 
 export function subscribeToRealtimePayloads(listener) {
   listeners.add(listener)
+
+  emitFeedSnapshot(listener)
 
   for (const feed of runtimeFeeds.values()) {
     listener({ type: 'feed_state', data: buildFeedState(feed) })

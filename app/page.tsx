@@ -79,6 +79,28 @@ export default function MomentHuntPage() {
       Object.values(feedsByMatch)
         .filter((feed) => feed.source === mode)
         .sort((left, right) => {
+          const leftStreamSource = parseStreamSource(
+            left.streamUrl,
+            embedParentHost,
+            left.streamSyncSupported,
+          )
+          const rightStreamSource = parseStreamSource(
+            right.streamUrl,
+            embedParentHost,
+            right.streamSyncSupported,
+          )
+          const leftHasPlayableVideo =
+            leftStreamSource.kind !== "empty" &&
+            leftStreamSource.kind !== "unsupported" &&
+            !!leftStreamSource.playableUrl
+          const rightHasPlayableVideo =
+            rightStreamSource.kind !== "empty" &&
+            rightStreamSource.kind !== "unsupported" &&
+            !!rightStreamSource.playableUrl
+
+          const byPlayableVideo = Number(rightHasPlayableVideo) - Number(leftHasPlayableVideo)
+          if (byPlayableVideo !== 0) return byPlayableVideo
+
           const byStatus = FEED_STATUS_ORDER[left.streamStatus] - FEED_STATUS_ORDER[right.streamStatus]
           if (byStatus !== 0) return byStatus
 
@@ -87,15 +109,19 @@ export default function MomentHuntPage() {
 
           return left.title.localeCompare(right.title)
         }),
-    [feedsByMatch, mode],
+    [embedParentHost, feedsByMatch, mode],
+  )
+  const selectedFeed = useMemo(
+    () => currentStreams.find((feed) => feed.matchId === selectedMatchId) ?? null,
+    [currentStreams, selectedMatchId],
   )
   const currentFeed = useMemo(() => {
-    if (selectedMatchId && feedsByMatch[selectedMatchId]?.source === mode) {
-      return feedsByMatch[selectedMatchId]
+    if (selectedFeed) {
+      return selectedFeed
     }
 
     return currentStreams[0] ?? null
-  }, [currentStreams, feedsByMatch, mode, selectedMatchId])
+  }, [currentStreams, selectedFeed])
   const currentStreamSource = useMemo(
     () =>
       parseStreamSource(
@@ -321,10 +347,18 @@ export default function MomentHuntPage() {
     }
   }
 
+  const handleEmbedLoad = () => {
+    if (!currentFeed?.matchId) return
+    setVideoStateByMatch((prev) => ({ ...prev, [currentFeed.matchId]: "loaded" }))
+  }
+
   const handleVideoError = () => {
     if (!currentFeed?.matchId) return
     setVideoStateByMatch((prev) => ({ ...prev, [currentFeed.matchId]: "error" }))
   }
+
+  const isEmbedSource =
+    currentStreamSource.kind === "youtube" || currentStreamSource.kind === "twitch"
 
   const videoStatusText =
     currentStreamSource.kind === "empty"
@@ -336,12 +370,22 @@ export default function MomentHuntPage() {
         : currentVideoState === "ready"
           ? currentStreamSource.syncSupported
             ? "Video synced to feed clock"
-            : currentFeed?.source === "esports"
-              ? "Demo broadcast embed is active"
-              : "Broadcast embed is active"
+            : currentFeed?.streamStatus === "REPLAY"
+                ? "Replay clip is active"
+                : "Broadcast video is active"
+          : currentVideoState === "loaded"
+            ? currentFeed?.source === "esports"
+              ? "Embed loaded. Channel playback is not verified"
+              : "Embed loaded. Provider playback is not verified"
           : currentVideoState === "loading"
-            ? "Loading video source"
-            : "Video failed to load"
+            ? isEmbedSource
+              ? "Loading broadcast embed"
+              : currentFeed?.streamStatus === "REPLAY"
+              ? "Loading replay clip"
+              : "Loading video source"
+            : isEmbedSource
+              ? "Embed failed to load"
+              : "Video failed to load"
 
   const videoOverlayTitle =
     currentStreamSource.kind === "empty"
@@ -349,12 +393,34 @@ export default function MomentHuntPage() {
       : currentStreamSource.kind === "unsupported"
         ? "This link cannot be embedded"
         : currentVideoState === "error"
-          ? "Video source could not be loaded"
-          : "Connecting video stream"
+          ? isEmbedSource
+            ? "Broadcast embed could not be loaded"
+            : "Video source could not be loaded"
+          : isEmbedSource
+            ? "Loading broadcast embed"
+            : currentFeed?.streamStatus === "REPLAY"
+            ? "Loading replay clip"
+            : "Connecting video stream"
 
   const videoOverlayHint =
     currentStreamSource.kind === "unsupported"
       ? currentStreamSource.reason ?? "The API returned a stream URL that the browser cannot render."
+      : currentStreamSource.kind !== "empty" && currentVideoState === "loading"
+        ? isEmbedSource
+          ? currentFeed?.source === "esports"
+            ? `${currentFeed?.title ?? "This match"} uses a simulated esports replay timeline. The provider embed is loading, but the channel may still be offline or unavailable.`
+            : `The provider embed is loading. Playback still depends on the upstream channel and embed policy.`
+          : currentFeed?.streamStatus === "REPLAY"
+          ? `${currentFeed?.title ?? "This match"} includes an upstream replay clip. Loading can take a few seconds on remote hosting.`
+          : `The selected feed includes a stream URL and the browser is still trying to connect.`
+        : currentStreamSource.kind !== "empty" && currentVideoState === "error"
+          ? isEmbedSource
+            ? currentFeed?.source === "esports"
+              ? `The provider embed could not be loaded. The simulated esports timeline can continue even if the linked channel is offline or blocks embedding.`
+              : `The provider embed could not be loaded by the browser.`
+            : currentFeed?.streamStatus === "REPLAY"
+            ? `The selected replay clip was present in the upstream feed, but the browser could not load it.`
+            : `The provided stream URL could not be loaded by the browser.`
       : currentFeed
         ? currentFeed.source === "esports"
           ? currentFeed.broadcastName
@@ -377,18 +443,19 @@ export default function MomentHuntPage() {
     !!currentStreamSource.playableUrl
 
   const currentSourceLabel =
-    currentFeed?.broadcastName
-      ? `Broadcast: ${currentFeed.broadcastName}`
-      : !currentFeed?.streamUrl
-        ? "No playable stream URL"
-        : currentStreamSource.label
-
+    currentStreamSource.kind === "empty"
+      ? currentFeed?.broadcastName
+        ? `Broadcast: ${currentFeed.broadcastName}`
+        : "No playable stream URL"
+      : currentStreamSource.label
   const subtitleText =
     mode === "esports"
       ? "Simulated esports replay feed with normalized event timing"
       : currentStreamSource.syncSupported
         ? "Realtime prediction with synced video and event feed"
-        : "Realtime match feed with scoreboard and event updates"
+        : currentStreamSource.kind !== "empty" && currentFeed?.streamStatus === "REPLAY"
+          ? "Replay clip with normalized event timing and browser-playable video"
+          : "Realtime match feed with scoreboard and event updates"
   const clockLabelText = getClockLabel(currentFeed)
   const clockHintText = getClockHint(currentFeed)
 
@@ -449,6 +516,7 @@ export default function MomentHuntPage() {
                 mode={mode}
                 onArmRound={handleArmRound}
                 onCatch={handleCatch}
+                onEmbedLoad={handleEmbedLoad}
                 onToggleVideoMute={handleToggleVideoMute}
                 onVideoError={handleVideoError}
                 onVideoReady={handleVideoReady}

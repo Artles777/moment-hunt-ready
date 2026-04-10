@@ -2,7 +2,7 @@ export type Mode = "sports" | "esports"
 export type Source = "sports" | "esports"
 export type GameState = "idle" | "armed" | "guess-locked" | "resolved"
 export type ConnectionState = "connecting" | "connected" | "disconnected"
-export type VideoLoadState = "idle" | "loading" | "ready" | "error"
+export type VideoLoadState = "idle" | "loading" | "ready" | "loaded" | "error"
 export type StreamKind = "empty" | "video" | "youtube" | "twitch" | "unsupported"
 export type FeedStatus = "LIVE" | "REPLAY" | "SCHEDULED" | "FINAL"
 export type EventType = string
@@ -40,6 +40,11 @@ export interface FeedState {
   awayScore: number | null
   isPlayable: boolean
   eventCount: number
+}
+
+export interface FeedSnapshot {
+  source: Source
+  matchIds: string[]
 }
 
 export interface LeaderboardEntry {
