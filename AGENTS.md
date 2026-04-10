@@ -20,7 +20,7 @@ Moment Hunt is currently a single-screen realtime prototype with:
 - a server-side realtime runtime with an in-app SSE endpoint and an optional local WebSocket adapter
 - real sports metadata and events sourced from ESPN soccer endpoints
 - simulated esports demo feeds emitted by the shared realtime runtime
-- a local-only leaderboard persisted in browser storage
+- a Blob-backed shared leaderboard keyed by a cookie-scoped demo player id
 - separate `sports` and `esports` tabs sharing one normalized gameplay contract
 
 Important honesty rule:
@@ -65,6 +65,7 @@ Current source-of-truth map:
 - Event/feed interfaces in practice: `lib/moment-hunt/types.ts`
 - Scoring rules in practice: `lib/moment-hunt/scoring.ts`
 - Realtime transport/protocol: `server/realtime-runtime.mjs`, `app/api/realtime/route.ts`, and `server/realtime-server.mjs` for the optional local WebSocket adapter
+- Leaderboard persistence/runtime: `server/leaderboard-store.ts`, `app/api/leaderboard/route.ts`, and `lib/moment-hunt/scoring.ts`
 - Realtime client behavior: `hooks/use-moment-hunt-realtime.ts`
 - Page-level gameplay orchestration: `app/page.tsx`
 - Product-specific UI composition: `components/moment-hunt/*`
@@ -91,7 +92,7 @@ Implication:
   - feed selection
   - video state handling
   - gameplay state machine
-  - leaderboard persistence wiring
+  - leaderboard fetch/update wiring
   - composition of product-specific UI modules
 
 - `components/moment-hunt/*`
@@ -109,6 +110,12 @@ Implication:
 
 - `lib/moment-hunt/scoring.ts`
   Shared scoring constants and deterministic score calculation.
+
+- `server/leaderboard-store.ts`
+  Blob-backed leaderboard storage, normalization, and optimistic-concurrency writes.
+
+- `app/api/leaderboard/route.ts`
+  Same-origin leaderboard API used by the client to read, add score, and reset the current demo player.
 
 - `lib/moment-hunt/stream-source.ts`
   Stream URL parsing and embed/direct source normalization.
@@ -185,12 +192,10 @@ Do not bypass this flow casually.
 
 ### Leaderboard contract
 
-- The leaderboard is local-only today.
-- Persistence key: `moment-hunt-leaderboard-v2`
-- "You" is the local mutable player row.
+- The leaderboard is Blob-backed today.
+- The current player is identified by the `moment-hunt-player-id` cookie.
+- Resetting the session should only reset the current player's score, not wipe other players.
 - Ranks are recalculated after score updates.
-
-Do not add heavy persistence infrastructure unless the task explicitly asks for it.
 
 ### Realtime feed contract
 

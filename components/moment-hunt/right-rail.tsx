@@ -7,6 +7,7 @@ export function RightRail({
   activityItems,
   canArmRound,
   currentFeed,
+  currentPlayerId,
   currentSourceLabel,
   leaderboard,
   onArmRound,
@@ -17,6 +18,7 @@ export function RightRail({
   activityItems: EventLog[]
   canArmRound: boolean
   currentFeed: FeedState | null
+  currentPlayerId: string | null
   currentSourceLabel: string
   leaderboard: LeaderboardEntry[]
   onArmRound: () => void
@@ -52,7 +54,7 @@ export function RightRail({
           </Button>
           <Button variant="secondary" size="sm" className="flex-1 gap-2 rounded-lg bg-secondary/50" onClick={onResetSession}>
             <RotateCcw className="h-3.5 w-3.5" />
-            Reset
+            Reset Me
           </Button>
           <Button variant="secondary" size="sm" className="rounded-lg bg-secondary/50 px-3" onClick={onReconnect}>
             <RefreshCw className="h-3.5 w-3.5" />
@@ -67,10 +69,10 @@ export function RightRail({
         </div>
         <div className="space-y-2">
           {leaderboard.map((entry) => (
-            <div key={entry.player} className={`flex items-center justify-between rounded-xl px-3 py-2.5 ${entry.player === "You" ? "bg-primary/10 ring-1 ring-primary/20" : "bg-surface/50"}`}>
+            <div key={entry.id} className={`flex items-center justify-between rounded-xl px-3 py-2.5 ${entry.id === currentPlayerId ? "bg-primary/10 ring-1 ring-primary/20" : "bg-surface/50"}`}>
               <div className="flex items-center gap-3">
                 <span className="w-5 text-center text-sm font-medium text-muted-foreground">{entry.rank}</span>
-                <span className={`text-sm ${entry.player === "You" ? "font-medium text-primary" : "text-foreground"}`}>{entry.player}</span>
+                <span className={`text-sm ${entry.id === currentPlayerId ? "font-medium text-primary" : "text-foreground"}`}>{entry.player}</span>
               </div>
               <span className="font-mono text-sm tabular-nums text-foreground">{entry.score}</span>
             </div>

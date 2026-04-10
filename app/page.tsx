@@ -10,8 +10,6 @@ import { useMomentHuntRealtime } from "@/hooks/use-moment-hunt-realtime"
 import {
   DEFAULT_LEADERBOARD,
   getScore,
-  STORAGE_KEY,
-  upsertLeaderboard,
 } from "@/lib/moment-hunt/scoring"
 import {
   getClockHint,
@@ -24,6 +22,7 @@ import type {
   FeedStatus,
   GameState,
   LeaderboardEntry,
+  LeaderboardResponse,
   LiveEvent,
   Mode,
   RoundResult,
@@ -42,6 +41,7 @@ const FEED_STATUS_ORDER: Record<FeedStatus, number> = {
 export default function MomentHuntPage() {
   const [mode, setMode] = useState<Mode>("sports")
   const [selectedMatchId, setSelectedMatchId] = useState<string | null>(null)
+  const [currentPlayerId, setCurrentPlayerId] = useState<string | null>(null)
   const [leaderboard, setLeaderboard] = useState<LeaderboardEntry[]>(DEFAULT_LEADERBOARD)
   const [gameState, setGameState] = useState<GameState>("idle")
   const [targetEvent, setTargetEvent] = useState<LiveEvent | null>(null)
@@ -141,27 +141,46 @@ export default function MomentHuntPage() {
             ? "error"
             : "loading")
   const yourScore = useMemo(
-    () => leaderboard.find((entry) => entry.player === "You")?.score ?? 0,
-    [leaderboard],
+    () => leaderboard.find((entry) => entry.id === currentPlayerId)?.score ?? 0,
+    [currentPlayerId, leaderboard],
+  )
+
+  const applyLeaderboardResponse = useCallback((payload: LeaderboardResponse) => {
+    setLeaderboard(payload.entries)
+    setCurrentPlayerId(payload.playerId)
+  }, [])
+
+  const syncLeaderboard = useCallback(
+    async (options?: { method?: "DELETE" | "GET" | "POST"; scoreDelta?: number }) => {
+      const response = await fetch("/api/leaderboard", {
+        body:
+          options?.method === "POST"
+            ? JSON.stringify({ scoreDelta: options.scoreDelta })
+            : undefined,
+        cache: "no-store",
+        headers:
+          options?.method === "POST"
+            ? { "Content-Type": "application/json" }
+            : undefined,
+        method: options?.method ?? "GET",
+      })
+
+      if (!response.ok) {
+        throw new Error(`Leaderboard request failed: ${response.status}`)
+      }
+
+      const payload = (await response.json()) as LeaderboardResponse
+      applyLeaderboardResponse(payload)
+      return payload
+    },
+    [applyLeaderboardResponse],
   )
 
   useEffect(() => {
-    const fromStorage = window.localStorage.getItem(STORAGE_KEY)
-    if (!fromStorage) return
-
-    try {
-      const parsed = JSON.parse(fromStorage) as LeaderboardEntry[]
-      if (Array.isArray(parsed) && parsed.length > 0) {
-        setLeaderboard(parsed)
-      }
-    } catch {
-      // ignore bad storage
-    }
-  }, [])
-
-  useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(leaderboard))
-  }, [leaderboard])
+    void syncLeaderboard().catch((error) => {
+      console.error("[moment-hunt] failed to fetch leaderboard", error)
+    })
+  }, [syncLeaderboard])
 
   useEffect(() => {
     setEmbedParentHost(window.location.hostname || "localhost")
@@ -283,9 +302,11 @@ export default function MomentHuntPage() {
     setResolvedEventIds((prev) => [...prev, targetEvent.id])
 
     if (score > 0) {
-      setLeaderboard((prev) => upsertLeaderboard(prev, score))
+      void syncLeaderboard({ method: "POST", scoreDelta: score }).catch((error) => {
+        console.error("[moment-hunt] failed to persist score", error)
+      })
     }
-  }, [gameState, guessMs, resolvedEventIds, targetEvent])
+  }, [gameState, guessMs, resolvedEventIds, syncLeaderboard, targetEvent])
 
   const handleArmRound = () => {
     setGameState("armed")
@@ -300,15 +321,19 @@ export default function MomentHuntPage() {
     setGameState("guess-locked")
   }
 
-  const handleResetSession = () => {
+  const handleResetSession = async () => {
     setGameState("idle")
     setTargetEvent(null)
     setGuessMs(null)
     setResult(null)
     setResolvedEventIds([])
     clearEventLog()
-    setLeaderboard(DEFAULT_LEADERBOARD)
-    window.localStorage.removeItem(STORAGE_KEY)
+
+    try {
+      await syncLeaderboard({ method: "DELETE" })
+    } catch (error) {
+      console.error("[moment-hunt] failed to reset player score", error)
+    }
   }
 
   const handleSelectBroadcast = (feed: FeedState) => {
@@ -544,6 +569,7 @@ export default function MomentHuntPage() {
                 activityItems={activityItems}
                 canArmRound={canArmRound}
                 currentFeed={currentFeed}
+                currentPlayerId={currentPlayerId}
                 currentSourceLabel={currentSourceLabel}
                 leaderboard={leaderboard}
                 onArmRound={handleArmRound}

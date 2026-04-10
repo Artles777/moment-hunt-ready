@@ -12,7 +12,7 @@ Realtime MVP игры, где пользователь пытается пойм
 - для `esports` доступны симулированные demo-feed трансляции с тем же нормализованным event schema
 - playable video зависит от того, отдаёт ли upstream API embed/direct stream URL
 - scoring по точности попадания
-- leaderboard c сохранением в `localStorage`
+- shared leaderboard в `Vercel Blob`
 - один экран для короткого демо
 
 ## Архитектура
@@ -21,6 +21,8 @@ Realtime MVP игры, где пользователь пытается пойм
 - `components/moment-hunt/*` — product-specific UI-модули: header, broadcasts, video hero, game panel, right rail
 - `lib/moment-hunt/types.ts` — нормализованные типы feed/event/game state
 - `lib/moment-hunt/scoring.ts` — scoring и leaderboard-константы
+- `server/leaderboard-store.ts` — Blob-backed leaderboard storage с optimistic concurrency
+- `app/api/leaderboard/route.ts` — same-origin API для leaderboard и demo player cookie
 - `lib/moment-hunt/format.ts` — форматирование clock/status/event labels
 - `lib/moment-hunt/stream-source.ts` — нормализация video/embed URL
 - `hooks/use-moment-hunt-realtime.ts` — WebSocket/SSE client, feed_state/live_event ingestion
@@ -61,13 +63,14 @@ npm run start
 6. UI строит sidebar трансляций из `feed_state`, а не из локального конфига страницы.
 7. UI не знает будущих событий заранее — он только получает их через realtime transport.
 8. Если upstream API не даёт playable stream URL, UI честно показывает broadcast/channel metadata без встроенного видео.
-9. Пользователь жмёт `Catch`, система сравнивает `guess timestamp` и `event timestamp`, после чего начисляет очки.
+9. Пользователь жмёт `Catch`, система сравнивает `guess timestamp` и `event timestamp`, после чего начисляет очки и сохраняет их в общий Blob-backed leaderboard для текущего demo player.
 
 ## Что говорить на демо
 
 - MVP сознательно разделён на слой показа трансляции, слой событий и игровую логику.
 - Оба режима используют один и тот же event schema.
 - `sports` показывает реальные upstream sports events, `esports` сейчас работает как явно помеченный simulated demo feed.
+- leaderboard теперь общий между клиентами одного деплоя, а идентичность игрока держится в cookie без отдельной авторизации.
 - Для тестового важнее рабочий игровой цикл и realtime delivery, чем полноценный video ingestion.
 - Следующий шаг — добавить реальный esports source рядом с уже существующим sports polling.
 
@@ -75,5 +78,5 @@ npm run start
 
 - подключить реальный football events API на сервере
 - добавить выбор конкретного матча
-- вынести leaderboard в Supabase
+- добавить смену display name поверх cookie-scoped demo player id
 - сделать короткое видео-демо на 60–90 секунд

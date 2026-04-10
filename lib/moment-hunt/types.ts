@@ -48,9 +48,16 @@ export interface FeedSnapshot {
 }
 
 export interface LeaderboardEntry {
+  id: string
   rank: number
   player: string
   score: number
+}
+
+export interface LeaderboardResponse {
+  entries: LeaderboardEntry[]
+  playerId: string
+  playerLabel: string
 }
 
 export interface EventLog {
