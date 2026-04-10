@@ -17,9 +17,9 @@ This file is the operating contract for contributors and coding agents working i
 Moment Hunt is currently a single-screen realtime prototype with:
 
 - a Next.js frontend in `app/*`
-- a local WebSocket realtime server in `server/realtime-server.mjs`
+- a server-side realtime runtime with an in-app SSE endpoint and an optional local WebSocket adapter
 - real sports metadata and events sourced from ESPN soccer endpoints
-- simulated esports demo feeds emitted by the local realtime server
+- simulated esports demo feeds emitted by the shared realtime runtime
 - a local-only leaderboard persisted in browser storage
 - separate `sports` and `esports` tabs sharing one normalized gameplay contract
 
@@ -64,7 +64,7 @@ Current source-of-truth map:
 
 - Event/feed interfaces in practice: `lib/moment-hunt/types.ts`
 - Scoring rules in practice: `lib/moment-hunt/scoring.ts`
-- Realtime transport/protocol: `server/realtime-server.mjs`
+- Realtime transport/protocol: `server/realtime-runtime.mjs`, `app/api/realtime/route.ts`, and `server/realtime-server.mjs` for the optional local WebSocket adapter
 - Realtime client behavior: `hooks/use-moment-hunt-realtime.ts`
 - Page-level gameplay orchestration: `app/page.tsx`
 - Product-specific UI composition: `components/moment-hunt/*`
@@ -75,7 +75,7 @@ Current source-of-truth map:
 
 Implication:
 
-- if you change the event contract, update `server/realtime-server.mjs`, `lib/moment-hunt/types.ts`, realtime ingestion, and UI consumers in the same task
+- if you change the event contract, update `server/realtime-runtime.mjs`, `app/api/realtime/route.ts`, `server/realtime-server.mjs`, `lib/moment-hunt/types.ts`, realtime ingestion, and UI consumers in the same task
 - if you change scoring, update both the scoring implementation and every UI that renders scoring results in the same task
 - if you change normalized helpers or realtime client behavior, update all consumers in the same task
 
@@ -117,18 +117,24 @@ Implication:
   Formatting helpers for clock values, labels, and UI-safe event text.
 
 - `hooks/use-moment-hunt-realtime.ts`
-  WebSocket client transport, feed-state ingestion, and live-event normalization into UI-friendly state.
+  WebSocket/SSE client transport, feed-state ingestion, and live-event normalization into UI-friendly state.
+
+- `app/api/realtime/route.ts`
+  Same-origin SSE endpoint used by `next start` and Vercel deployments.
+
+- `server/realtime-runtime.mjs`
+  Shared realtime runtime.
+  It fetches sports data, emits simulated esports demo feeds, normalizes feeds, emits `feed_state`, emits `live_event`, and simulates replay progression for completed matches.
 
 - `app/globals.css`
   Global theme tokens and layout visual language.
   The current visual direction is intentional: dark glassmorphism with custom tokens such as `--glass`, `--surface`, `--live`, `--success`.
 
 - `server/realtime-server.mjs`
-  Local realtime server.
-  It fetches sports data, emits simulated esports demo feeds, normalizes feeds, emits `feed_state`, emits `live_event`, and simulates replay progression for completed matches.
+  Optional local WebSocket adapter for the shared realtime runtime.
 
 - `scripts/dev-all.mjs`
-  Runs Next.js and the WebSocket server together.
+  Runs Next.js and the local WebSocket adapter together.
 
 - `components/ui/*`
   Shared UI primitives. Treat them as generic building blocks, not as a place for product-specific game logic.
@@ -154,7 +160,7 @@ The user experience may improve, but this sequence must remain coherent end-to-e
 ### Source of truth rules
 
 - The frontend must not invent future events locally.
-- The frontend should react to normalized WebSocket messages, not raw provider payloads.
+- The frontend should react to normalized realtime messages, not raw provider payloads.
 - The stream catalog must come from realtime feed state, not from hardcoded UI arrays.
 - The currently selected broadcast must always correspond to the current feed list.
 
@@ -188,7 +194,7 @@ Do not add heavy persistence infrastructure unless the task explicitly asks for 
 
 ### Realtime feed contract
 
-The frontend currently expects two normalized WebSocket message types:
+The frontend currently expects two normalized realtime message types:
 
 #### `feed_state`
 
@@ -350,7 +356,7 @@ What is not acceptable:
 
 ## Common regression traps
 
-- replacing WebSocket state with local constants or mock arrays
+- replacing realtime state with local constants or mock arrays
 - resetting the selected feed incorrectly when feed ordering changes
 - breaking the round reset when the match changes
 - reimplementing scoring in multiple places
@@ -358,7 +364,7 @@ What is not acceptable:
 - assuming every feed has `streamUrl`
 - assuming `.m3u8` works in every browser without explicit player support
 - moving the broadcast list into a nested scroll area on desktop
-- changing WebSocket fields without updating both server and frontend
+- changing realtime message fields without updating both server and frontend
 - rewriting `app/page.tsx`, `components/moment-hunt/*`, or `hooks/use-moment-hunt-realtime.ts` wholesale and accidentally dropping part of the game loop
 - mixing provider payloads directly into UI state without normalization
 
@@ -414,7 +420,7 @@ Before editing:
 
 When changing frontend behavior:
 
-- keep WebSocket-driven flow intact
+- keep realtime-driven flow intact
 - do not hardcode future events
 - preserve honest empty-video fallback behavior
 - preserve the desktop left-column broadcast layout

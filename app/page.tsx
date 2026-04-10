@@ -30,7 +30,7 @@ import type {
   VideoLoadState,
 } from "@/lib/moment-hunt/types"
 
-const WS_URL = process.env.NEXT_PUBLIC_WS_URL || "ws://localhost:3001"
+const WS_URL = process.env.NEXT_PUBLIC_WS_URL
 
 const FEED_STATUS_ORDER: Record<FeedStatus, number> = {
   LIVE: 0,
